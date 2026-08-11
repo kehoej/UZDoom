@@ -880,6 +880,7 @@ void HWDrawInfo::PreparePlayerSprites(sector_t * viewsector, area_t in_area)
 		!r_drawplayersprites ||
 		!camera->player ||
 		(player->cheats & CF_CHASECAM) ||
+		R_ObliqueCameraActive(player) ||	// [hellshift] No first person weapon on an external camera.
 		(r_deathcamera && camera->health <= 0))
 		return;
 
@@ -915,6 +916,7 @@ void HWDrawInfo::PrepareTargeterSprites(double ticfrac)
 		!r_drawplayersprites ||
 		!camera->player ||
 		(player->cheats & CF_CHASECAM) ||
+		R_ObliqueCameraActive(player) ||	// [hellshift] No first person weapon on an external camera.
 		(r_deathcamera && camera->health <= 0))
 		return;
 

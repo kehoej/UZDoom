@@ -93,6 +93,7 @@ namespace swrenderer
 			!Thread->Viewport->viewpoint.camera ||
 			!Thread->Viewport->viewpoint.camera->player ||
 			(players[consoleplayer].cheats & CF_CHASECAM) ||
+			R_ObliqueCameraActive(&players[consoleplayer]) ||	// [hellshift] No first person weapon on an external camera.
 			(r_deathcamera && Thread->Viewport->viewpoint.camera->health <= 0))
 			return;
 

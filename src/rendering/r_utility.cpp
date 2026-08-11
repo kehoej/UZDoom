@@ -75,6 +75,7 @@ struct InterpolationViewer
 	AActor* ViewActor;
 	DVector3 ViewOffset, RelativeViewOffset; // This has to be a separate field since it needs the real-time mouse angles.
 	DRotator AngleOffsets;
+	bool bOblique;	// [hellshift] Decided in R_SetupFrame, consumed in R_InterpolateView.
 	int prevTic;
 	instance Old, New;
 };
@@ -95,6 +96,12 @@ CVAR (Bool, r_drawplayersprites, true, 0)	// [RH] Draw player sprites?
 CVARD (Bool, r_radarclipper, false, CVAR_ARCHIVE | CVAR_SERVERINFO | CVAR_CHEAT, "Use the horizontal clipper from camera->tracer's perspective")
 CVARD (Bool, r_dithertransparency, false, CVAR_ARCHIVE | CVAR_SERVERINFO | CVAR_CHEAT, "Use dithered-transparency shading for actor-occluding level geometry")
 CVARD (Bool, oblique_enabled, false, CVAR_ARCHIVE, "Enable the experimental oblique overhead camera")
+CVARD (Float, oblique_distance, 128.0, CVAR_ARCHIVE, "Oblique camera: distance from the player along the camera ray")
+CVARD (Float, oblique_height, 0.0, CVAR_ARCHIVE, "Oblique camera: extra vertical offset above the player")
+CVARD (Float, oblique_pitch, 40.0, CVAR_ARCHIVE, "Oblique camera: downward pitch in degrees")
+CVARD (Float, oblique_yaw_offset, 0.0, CVAR_ARCHIVE, "Oblique camera: yaw offset from the player's facing, in degrees")
+CVARD (Float, oblique_fov, 0.0, CVAR_ARCHIVE, "Oblique camera: field of view in degrees (0 = use the normal FOV)")
+CVARD (Bool, oblique_orthographic, false, CVAR_ARCHIVE, "Oblique camera: orthographic projection (not implemented yet, see Milestone 6)")
 CUSTOM_CVAR(Float, r_quakeintensity, 1.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 {
 	if (self < 0.f) self = 0.f;
@@ -189,6 +196,20 @@ static bool UseChaseCam(const player_t& player)
 {
 	return gamestate == GS_LEVEL &&
 		   ((player.cheats & CF_CHASECAM) || (r_deathcamera && player.playerstate == PST_DEAD));
+}
+
+//==========================================================================
+//
+// R_ObliqueCameraActive
+//
+// [hellshift] True while the experimental oblique camera replaces the
+// player's own view. The chase and death cameras take precedence over it.
+//
+//==========================================================================
+
+bool R_ObliqueCameraActive(const player_t* const player)
+{
+	return oblique_enabled && player != nullptr && gamestate == GS_LEVEL && !UseChaseCam(*player);
 }
 
 //==========================================================================
@@ -640,6 +661,16 @@ void R_InterpolateView(FRenderViewpoint& viewPoint, const player_t* const player
 		viewPoint.Angles.Roll = iView->Old.Angles.Roll + deltaangle(iView->Old.Angles.Roll, iView->New.Angles.Roll) * ticFrac;
 	}
 
+	// [hellshift] The oblique camera looks from a fixed angle instead of the
+	// player's own, so pin the angles before the offset below is taken along
+	// the resulting ray.
+	if (iView->bOblique)
+	{
+		viewPoint.Angles.Yaw += DAngle::fromDeg(clamp<double>(oblique_yaw_offset, -180.0, 180.0));
+		viewPoint.Angles.Pitch = DAngle::fromDeg(clamp<double>(oblique_pitch, -89.0, 89.0));
+		viewPoint.Angles.Roll = nullAngle;
+	}
+
 	// Now that the base position and angles are set, add offsets.
 
 	const DViewPosition* const vPos = iView->ViewActor->ViewPos;
@@ -979,6 +1010,9 @@ void R_SetupFrame(FRenderViewpoint& viewPoint, const FViewWindow& viewWindow, AA
 	iView->ViewOffset.Zero();
 	iView->RelativeViewOffset.Zero();
 	iView->AngleOffsets.Zero();
+	// [hellshift] Decided once per frame so that R_InterpolateView pins the
+	// view angles the offset set further down is measured against.
+	iView->bOblique = player != nullptr && viewPoint.camera == player->mo && R_ObliqueCameraActive(player);
 	if (iView->prevTic != -1 && curTic > iView->prevTic)
 	{
 		// If it's been more than a tic since it was rendered, don't interpolate
@@ -1041,6 +1075,16 @@ void R_SetupFrame(FRenderViewpoint& viewPoint, const FViewWindow& viewWindow, AA
 			camPos.Z = mo->Top() - mo->Floorclip;
 			iView->ViewOffset.Z = clamp<double>(chase_height, -1000.0, 1000.0);
 			iView->RelativeViewOffset.X = -clamp<double>(chase_dist, 0.0, 30000.0);
+		}
+		else if (iView->bOblique)
+		{
+			// [hellshift] Same shape as the chase cam above, but R_InterpolateView
+			// pins the view angles first, so the pull-back runs along the oblique
+			// ray and ends up behind and above the player regardless of their aim.
+			viewPoint.showviewer = true;
+			camPos.Z = mo->Top() - mo->Floorclip;
+			iView->ViewOffset.Z = clamp<double>(oblique_height, -1000.0, 1000.0);
+			iView->RelativeViewOffset.X = -clamp<double>(oblique_distance, 0.0, 30000.0);
 		}
 
 		if (viewOffset != nullptr)

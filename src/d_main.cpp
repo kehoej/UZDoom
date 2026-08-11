@@ -390,6 +390,7 @@ EXTERN_CVAR (Int, screenblocks)
 EXTERN_CVAR (Bool, sv_cheats)
 EXTERN_CVAR (Bool, sv_unlimited_pickup)
 EXTERN_CVAR (Bool, r_drawplayersprites)
+EXTERN_CVAR (Float, oblique_fov)
 EXTERN_CVAR (Bool, show_messages)
 EXTERN_CVAR(Bool, ticker)
 EXTERN_CVAR(Bool, vid_fps)
@@ -1144,6 +1145,11 @@ void D_Display ()
 		AActor *cam = players[consoleplayer].camera;
 		if (cam)
 			fov = DAngle::fromDeg(cam->GetFOV(I_GetTimeFrac()));
+
+		// [hellshift] The oblique camera frames the scene differently, so it may
+		// ask for its own FOV.
+		if (oblique_fov > 0.f && R_ObliqueCameraActive(&players[consoleplayer]))
+			fov = DAngle::fromDeg(oblique_fov);
 
 		R_SetFOV(vp, fov);
 	}
